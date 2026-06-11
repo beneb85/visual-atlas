@@ -1,0 +1,13 @@
+{
+  "name": "visual-atlas",
+  "version": "1.0.0",
+  "description": "VisualAtlas — infinite-canvas archive explorer built with Three.js",
+  "scripts": {
+    "start": "npx serve . -p 3001 -c serve-canvas.json",
+    "process": "node scripts/process-photos.mjs"
+  },
+  "dependencies": {
+    "exifr": "^7.1.3",
+    "sharp": "^0.33.5"
+  }
+}
