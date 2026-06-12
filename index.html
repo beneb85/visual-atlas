@@ -173,9 +173,11 @@
       text-transform: uppercase; color: var(--text-3);
     }
     #cluster-by {
-      background: var(--surface); color: var(--text);
-      border: 1px solid var(--line); border-radius: 0;
-      padding: 5px 8px; font-size: 11px; font-family: var(--font); outline: none;
+      -webkit-appearance: none; appearance: none;
+      background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6' fill='none' stroke='%23888' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 9px center;
+      background-size: 10px 6px;
+      color: var(--text); border: 1px solid var(--line); border-radius: 0;
+      padding: 5px 28px 5px 8px; font-size: 11px; font-family: var(--font); outline: none; cursor: pointer;
     }
     #cluster-by option { background: #1a1a1a; }
     #cluster-by option:disabled { color: var(--text-4); }
@@ -199,8 +201,28 @@
     .swatch.on { outline-color: var(--text); border-color: transparent; }
     .swatch:hover { transform: scale(1.08); }
 
-    .date-row { display: flex; flex-direction: column; gap: 10px; }
-    .date-row input[type=range] { width: 100%; accent-color: #fff; }
+    .date-row { display: flex; flex-direction: column; gap: 18px; }
+    .date-row input[type=range] {
+      -webkit-appearance: none; appearance: none;
+      width: 100%; height: 2px; background: var(--line);
+      outline: none; cursor: pointer; border-radius: 0;
+    }
+    .date-row input[type=range]::-webkit-slider-runnable-track {
+      height: 2px; background: var(--line); border-radius: 0;
+    }
+    .date-row input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px; height: 14px; border-radius: 50%;
+      background: #fff; cursor: pointer;
+      margin-top: -6px;
+    }
+    .date-row input[type=range]::-moz-range-track {
+      height: 2px; background: var(--line); border-radius: 0;
+    }
+    .date-row input[type=range]::-moz-range-thumb {
+      width: 14px; height: 14px; border-radius: 50%;
+      background: #fff; border: none; cursor: pointer;
+    }
     #date-label { font-size: 11px; color: var(--text-2); font-variant-numeric: tabular-nums; }
     .ai-note { font-size: 10px; color: var(--text-4); font-style: italic; }
     #panel .foot {
@@ -2210,6 +2232,7 @@
         opacity: 0, match: true,
         bucket: colorBucket(photo.dominantColor),
         dateNum: dateToNum(photo.date),
+        seedOnly: opts.seedOnly || false,
       };
       scene.add(mesh);
       personalMeshes.push(mesh);
@@ -3536,7 +3559,18 @@
     function openImport(forced) {
       closeFilters(); closeBookmarks();   // modal owns the screen
       document.getElementById('import').classList.add('open');
-      if (forced) selectSource(forced); else showPicker();
+      if (forced) {
+        selectSource(forced);
+      } else {
+        // Pre-select the currently active source so the user lands on the right collection.
+        // Explore mode is the AIC infinite field → treat as 'aic' / Highlights.
+        const src = (!canvasSource || canvasSource === 'explore') ? 'aic' : canvasSource;
+        if (ARCHIVE_FETCHERS[src]) {
+          selectSource(src, currentCollectionLabel || null);
+        } else {
+          showPicker();
+        }
+      }
     }
     function closeImport() { document.getElementById('import').classList.remove('open'); }
     function showPicker() {
@@ -3548,7 +3582,8 @@
     }
 
     // User picked a source → show its collection view and load it.
-    function selectSource(src) {
+    // activeLabel: optional — if supplied, the matching chip is highlighted instead of the first.
+    function selectSource(src, activeLabel) {
       importSource = src;
       document.querySelectorAll('.src-card[data-src]').forEach((c) =>
         c.classList.toggle('active', c.dataset.src === src));
@@ -3567,8 +3602,10 @@
       if (isUpload) { renderUploadGrid(); setCount(''); }
       else if (isOwn) { setCount(''); }
       else {
-        // Show the source's collections and auto-load the Highlights default.
-        const def = (COLLECTIONS[src] && COLLECTIONS[src][0]) || { label: 'Highlights', query: DEFAULT_QUERY[src] || '' };
+        // Find the chip matching the active collection label; fall back to first (Highlights).
+        const chips = COLLECTIONS[src] || [];
+        const matched = activeLabel && chips.find((c) => c.label === activeLabel);
+        const def = matched || chips[0] || { label: 'Highlights', query: DEFAULT_QUERY[src] || '' };
         selectCollection(src, def);
         setTimeout(() => document.getElementById('ic-q').focus(), 0);
       }
@@ -4215,6 +4252,7 @@
         dismissUI();
       } else if (e.touches.length === 2) {
         ctrl.isDragging = false;
+        ctrl.hadMultiTouch = true;
         ctrl.pinch = Math.hypot(
           e.touches[1].clientX - e.touches[0].clientX,
           e.touches[1].clientY - e.touches[0].clientY
@@ -4249,9 +4287,14 @@
     }, { passive: true });
     canvas.addEventListener('touchend', (e) => {
       lastTouchEnd = Date.now();
-      if (!ctrl.didDrag && e.changedTouches.length === 1)
+      // Only treat as a tap if no multi-touch was ever active in this gesture.
+      if (!ctrl.didDrag && !ctrl.hadMultiTouch && e.changedTouches.length === 1)
         handleClick(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
-      ctrl.isDragging = false; ctrl.didDrag = false; ctrl.pinch = null;
+      // Clear all gesture state once all fingers are off the screen.
+      if (e.touches.length === 0) {
+        ctrl.isDragging = false; ctrl.didDrag = false;
+        ctrl.pinch = null; ctrl.hadMultiTouch = false;
+      }
     }, { passive: true });
 
     // Keyboard.
@@ -4502,6 +4545,8 @@
         // FPS-guard soft cap: hide nodes beyond the budget to recover frame rate.
         if (i >= nodeBudget) { mesh.visible = false; mesh.material.opacity = 0; mesh.userData.opacity = 0; continue; }
         const u = mesh.userData;
+        // Seed-only meshes exist solely for keyword/cluster metadata — invisible in explore mode.
+        if (u.seedOnly && viewMode !== 'cluster') { mesh.visible = false; u.opacity = 0; continue; }
         const tgt = viewMode === 'cluster' ? u.clusterPos : u.homePos;
         mesh.position.x = lerp(mesh.position.x, tgt.x, 0.07);
         mesh.position.y = lerp(mesh.position.y, tgt.y, 0.07);
@@ -4794,7 +4839,27 @@
       document.getElementById('load').classList.add('fade');
       updateChunks(0, 0, 0);
       requestAnimationFrame(frame);
+      // Silently seed AIC Highlights into personalMeshes so filter/cluster keywords
+      // are available immediately in explore mode without a manual collection load.
+      if (canvasSource === 'explore') seedExploreKeywords();
     });
+
+    async function seedExploreKeywords() {
+      try {
+        const list = await searchAIC('', 0, 100);
+        if (canvasSource !== 'explore') return;
+        for (const res of list) {
+          const purl = res.thumb; // AIC IIIF is CORS-clean, no proxy needed
+          addImportedMesh({
+            id: res.id, title: res.title, thumbnailUrl: purl, imageUrl: res.image,
+            source: res.source, metadata: res.metadata, aspect: 1, dominantColor: '#8a8a8a',
+          }, { batch: true, seedOnly: true });
+        }
+        if (canvasSource !== 'explore') return;
+        rebuildFacets();
+        updateClusterAvailability();
+      } catch {}
+    }
   </script>
 </body>
 </html>
