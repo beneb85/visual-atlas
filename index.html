@@ -755,6 +755,40 @@
     }
     .dc-btn:hover { opacity: 0.88; }
 
+    /* ── Source abbreviation chips (visible on mobile only) ── */
+    .src-abbr { display: none; }
+
+    /* ── Gesture icon — same visual weight as all other dock icons ── */
+    #dock-gesture svg { stroke-width: 1.8; }
+
+    /* ── Info bar bookmark — pushed to far right ── */
+    #info-bm { margin-left: auto; }
+
+    /* ── Canvas loading overlay ── */
+    #canvas-loading {
+      position: fixed; inset: 0; z-index: 55;
+      display: none; flex-direction: column; align-items: center; justify-content: center;
+      gap: 16px; background: rgba(10,10,10,0.72);
+      font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em;
+      text-transform: uppercase; color: var(--text-3);
+      transition: opacity 0.4s ease;
+    }
+    #canvas-loading.show { display: flex; }
+    #canvas-loading.fade-out { opacity: 0; pointer-events: none; }
+    .cl-spin { width: 32px; height: 32px; }
+    .cl-track { fill: none; stroke: var(--line); stroke-width: 2.5; }
+    .cl-arc {
+      fill: none; stroke: var(--text-3); stroke-width: 2.5; stroke-linecap: round;
+      transform-origin: 14px 14px;
+      animation: cl-rot 1.2s linear infinite, cl-dash 1.5s ease-in-out infinite;
+    }
+    @keyframes cl-rot  { 100% { transform: rotate(360deg); } }
+    @keyframes cl-dash {
+      0%   { stroke-dasharray: 2 70;  stroke-dashoffset: 0; }
+      50%  { stroke-dasharray: 46 70; stroke-dashoffset: -16; }
+      100% { stroke-dasharray: 2 70;  stroke-dashoffset: -70; }
+    }
+
     /* ── Tooltips (design-system: 200ms delay, top, max 220px, no glow) ── */
     [data-tip] { position: relative; }
     [data-tip]::after {
@@ -868,6 +902,23 @@
 
       /* Comfier touch targets for filter chips */
       .chip, .coll-chip { padding: 7px 12px; }
+
+      /* Source abbreviations replace full names on mobile chips */
+      .src-abbr { display: inline; font-size: 13px; color: var(--text); letter-spacing: 0.01em; }
+      .src-card .src-name { display: none; }
+
+      /* Hide ESC hint — not applicable on touch devices */
+      #info-esc, #info-esc + .info-sep, .info-sep:has(+ #info-esc) { display: none; }
+
+      /* Modals/panels cap at dock width so nothing overflows */
+      #music-panel { max-width: calc(100vw - 12px); }
+
+      /* Info bar bookmark right-align on mobile too */
+      .info-row-meta { width: 100%; }
+
+      /* Draggable sheet handle — tap area for the drag grip */
+      .insp-head { cursor: grab; touch-action: pan-y; }
+      .insp-head:active { cursor: grabbing; }
     }
   </style>
 </head>
@@ -938,9 +989,9 @@
       <span id="info-src">Art Institute of Chicago</span>
       <a id="info-link" target="_blank" rel="noopener noreferrer" style="display:none">View record ↗</a>
       <span id="info-link-sep" class="info-sep" style="display:none">·</span>
-      <button id="info-bm" title="Bookmark (B)"><svg viewBox="0 0 24 24"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-5-7 5V4a1 1 0 0 1 1-1z" stroke-linejoin="round"/></svg></button>
       <span class="info-sep">·</span>
       <span id="info-esc">ESC to close</span>
+      <button id="info-bm" title="Bookmark (B)"><svg viewBox="0 0 24 24"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-5-7 5V4a1 1 0 0 1 1-1z" stroke-linejoin="round"/></svg></button>
     </div>
   </div>
 
@@ -1043,11 +1094,6 @@
     <button class="dock-btn" id="dock-music" data-tip="Ambient music">
       <svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13" stroke-linejoin="round" stroke-linecap="round"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>
     </button>
-    <button class="dock-btn disabled" data-tip="Atlas Story Mode — coming soon">
-      <svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h5v16H6a2 2 0 0 0-2 2zM20 5a2 2 0 0 0-2-2h-5v16h5a2 2 0 0 1 2 2z" stroke-linejoin="round"/></svg>
-      <span class="dock-lbl">Story</span>
-      <span class="dock-sub">Soon</span>
-    </button>
     <span class="dock-div"></span>
     <button class="dock-btn" id="dock-reset" data-tip="Reset camera (keeps collection)">
       <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7" stroke-linecap="round"/><path d="M3 4v4h4" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -1069,13 +1115,14 @@
         <div class="ic-col-sources">
           <div class="ic-col-label">Sources</div>
           <div class="src-grid">
-            <button class="src-card" data-src="aic"><span class="src-name">Art Institute of Chicago</span><span class="src-sub">Public-domain art</span></button>
-            <button class="src-card" data-src="nasa"><span class="src-name">NASA</span><span class="src-sub">Space imagery</span></button>
-            <button class="src-card" data-src="smithsonian"><span class="src-name">Smithsonian</span><span class="src-sub">Institution collections</span></button>
-            <button class="src-card" data-src="internetArchive"><span class="src-name">Internet Archive</span><span class="src-sub">Scans &amp; photos</span></button>
-            <button class="src-card" data-src="bhl"><span class="src-name">Biodiversity Heritage Library</span><span class="src-sub">Natural history illustrations</span></button>
-            <button class="src-card" data-src="uploads"><span class="src-name">My Uploads</span><span class="src-sub">Your images</span></button>
-            <button class="src-card" data-src="own"><span class="src-name">Own Links</span><span class="src-sub">Dropbox · Drive · URLs</span></button>
+            <button class="src-card" data-src="aic"><span class="src-name">Art Institute of Chicago</span><span class="src-abbr">AIC</span><span class="src-sub">Public-domain art</span></button>
+            <button class="src-card" data-src="nasa"><span class="src-name">NASA</span><span class="src-abbr">NASA</span><span class="src-sub">Space imagery</span></button>
+            <button class="src-card" data-src="smithsonian"><span class="src-name">Smithsonian</span><span class="src-abbr">SI</span><span class="src-sub">Institution collections</span></button>
+            <button class="src-card" data-src="internetArchive"><span class="src-name">Internet Archive</span><span class="src-abbr">IA</span><span class="src-sub">Scans &amp; photos</span></button>
+            <button class="src-card" data-src="bhl"><span class="src-name">Biodiversity Heritage Library</span><span class="src-abbr">BHL</span><span class="src-sub">Natural history illustrations</span></button>
+            <button class="src-card" data-src="wikimedia"><span class="src-name">Wikimedia Commons</span><span class="src-abbr">Commons</span><span class="src-sub">Free media library</span></button>
+            <button class="src-card" data-src="uploads"><span class="src-name">My Uploads</span><span class="src-abbr">Uploads</span><span class="src-sub">Your images</span></button>
+            <button class="src-card" data-src="own"><span class="src-name">Own Links</span><span class="src-abbr">Links</span><span class="src-sub">Dropbox · Drive · URLs</span></button>
           </div>
         </div>
 
@@ -1150,6 +1197,15 @@
   <div id="toast"></div>
   <div id="dropveil">Drop to add images to the Atlas</div>
 
+  <!-- Canvas loading overlay — shown while a collection preloads thumbnails -->
+  <div id="canvas-loading">
+    <svg class="cl-spin" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+      <circle class="cl-track" cx="14" cy="14" r="11"/>
+      <circle class="cl-arc"   cx="14" cy="14" r="11"/>
+    </svg>
+    <span id="cl-label">Loading collection…</span>
+  </div>
+
   <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js" } }</script>
 
   <script type="module">
@@ -1168,7 +1224,7 @@
        of these forward-loaded chunks; only the depth-fade matters.
        ════════════════════════════════════════════════════════════════════════ */
     const CHUNK_SIZE        = 50;
-    const PLANES_PER_CHUNK  = 8;
+    const PLANES_PER_CHUNK  = navigator.maxTouchPoints > 0 ? 5 : 8;
     const RENDER_DISTANCE   = 2;   // all 27 active chunks keep gridFade = 1
     const CHUNK_FADE_MARGIN = 1;
 
@@ -2035,9 +2091,29 @@
     // bloating memory across hundreds of planes); focus swaps in a hi-res version.
     const proxied = (url, w = 820) => PROXY + encodeURIComponent(url) + '&w=' + w;
 
+    // ── Simple per-session rate limiter ──────────────────────────────────────
+    // Allows a burst of up to 60 requests then throttles to ~1/s. Prevents accidental
+    // hammering of public APIs and keeps within typical fair-use guidelines.
+    const rateLimit = (() => {
+      const BUCKET_MAX = 60, REFILL_MS = 1000;
+      let tokens = BUCKET_MAX, lastMs = Date.now();
+      return {
+        async wait() {
+          const now = Date.now();
+          tokens = Math.min(BUCKET_MAX, tokens + (now - lastMs) / REFILL_MS);
+          lastMs = now;
+          if (tokens >= 1) { tokens -= 1; return; }
+          // Bucket empty — wait until a token refills.
+          await new Promise((r) => setTimeout(r, REFILL_MS));
+          tokens = Math.max(0, tokens - 1);
+        },
+      };
+    })();
+
     // Resilient JSON fetch — retries with backoff + a timeout. Returns null on final
     // failure instead of throwing, so callers can tolerate partial results.
     async function fetchJSON(url, { retries = 2, timeout = 12000, signal = null } = {}) {
+      await rateLimit.wait();
       for (let attempt = 0; attempt <= retries; attempt++) {
         if (signal && signal.aborted) return null;   // caller cancelled (e.g. switched category)
         try {
@@ -2570,11 +2646,46 @@
       });
     }
 
-    const ARCHIVE_FETCHERS = { aic: searchAIC, nasa: searchNASA, internetArchive: searchIA, met: searchMET, bhl: searchBHL, smithsonian: searchSmithsonian };
-    const PROVIDER_MAX = { aic: 600, nasa: 600, internetArchive: 600, met: MET_MAX, bhl: 300, smithsonian: 300 };
+    // ── Wikimedia Commons ────────────────────────────────────────────────────
+    // General-purpose free-media search using the MediaWiki full-text search API.
+    // No API key required; CORS-clean; millions of CC-licensed images worldwide.
+    async function searchWikimedia(q, page = 0, count = 100, opts = {}) {
+      const signal = opts.signal;
+      const limit = Math.min(count, 50);
+      const term = (q || 'oil painting').trim();
+      const url = `${WM_API}?action=query&format=json&generator=search`
+        + `&gsrsearch=${encodeURIComponent(term)}&gsrnamespace=6`
+        + `&prop=imageinfo&iiprop=url%7Cextmetadata&iiurlwidth=600`
+        + `&gsrlimit=${limit}&gsroffset=${page * limit}&origin=*`;
+      const data = await fetchJSON(url, { signal });
+      if (!data?.query?.pages) return [];
+      return Object.values(data.query.pages).flatMap((pg) => {
+        const ii = (pg.imageinfo || [])[0];
+        if (!ii?.url || !/\.(jpe?g|png|gif|webp)/i.test(ii.url)) return [];
+        const thumb = ii.thumburl || ii.url;
+        const meta = ii.extmetadata || {};
+        const title = pg.title.replace(/^File:/i, '').replace(/\.[^.]+$/, '').replace(/_/g, ' ').trim();
+        let artist = (meta.Artist?.value || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+        if (artist.length > 40) artist = artist.slice(0, 40).replace(/\s+\S*$/, '') + '…';
+        const year = (meta.DateTimeOriginal?.value || meta.DateTime?.value || '').match(/\d{4}/)?.[0] || '';
+        return [{
+          id: 'wm_' + pg.pageid,
+          title: title || 'Wikimedia image',
+          thumb, image: ii.url, source: 'wikimedia',
+          metadata: {
+            collection: 'Wikimedia Commons', year,
+            location: artist || 'Wikimedia Commons',
+            recordUrl: `https://commons.wikimedia.org/wiki/${pg.title.replace(/ /g, '_')}`,
+          },
+        }];
+      });
+    }
+
+    const ARCHIVE_FETCHERS = { aic: searchAIC, nasa: searchNASA, internetArchive: searchIA, met: searchMET, bhl: searchBHL, smithsonian: searchSmithsonian, wikimedia: searchWikimedia };
+    const PROVIDER_MAX = { aic: 600, nasa: 600, internetArchive: 600, met: MET_MAX, bhl: 300, smithsonian: 300, wikimedia: 300 };
     const SOURCE_NAME = {
       aic: 'Art Institute of Chicago', nasa: 'NASA', met: 'The Met', internetArchive: 'Internet Archive',
-      bhl: 'Biodiversity Heritage Library', smithsonian: 'Smithsonian',
+      bhl: 'Biodiversity Heritage Library', smithsonian: 'Smithsonian', wikimedia: 'Wikimedia Commons',
       uploads: 'My Uploads', own: 'Own Links', explore: 'Explore (AIC)',
     };
 
@@ -2999,6 +3110,14 @@
         { label: 'Asian Art', query: 'asian art' },
         { label: 'Space', query: 'space NASA' },
       ],
+      wikimedia: [
+        { label: 'Paintings', query: 'oil painting' },
+        { label: 'Photographs', query: 'vintage photograph' },
+        { label: 'Portraits', query: 'portrait painting' },
+        { label: 'Landscapes', query: 'landscape painting' },
+        { label: 'Botany', query: 'botanical illustration' },
+        { label: 'Prints', query: 'engraving print artwork' },
+      ],
     };
 
     // Extended chip sets revealed when user clicks "Other +"
@@ -3055,6 +3174,16 @@
         { label: 'Archaeology', query: 'archaeology ancient' },
         { label: 'Science', query: 'scientific instrument' },
         { label: 'Natural History', query: 'natural history' },
+      ],
+      wikimedia: [
+        { label: 'Watercolours', query: 'watercolour painting artwork' },
+        { label: 'Drawings', query: 'pencil drawing sketch artwork' },
+        { label: 'Maps', query: 'historical map cartography' },
+        { label: 'Anatomy', query: 'anatomy illustration medical' },
+        { label: 'Astronomy', query: 'astronomy star chart celestial' },
+        { label: 'Architecture', query: 'architecture building drawing' },
+        { label: 'Still Life', query: 'still life painting' },
+        { label: 'Illuminated', query: 'illuminated manuscript medieval' },
       ],
     };
     let currentCollectionLabel = '';
@@ -3533,14 +3662,46 @@
     }
 
     // Commit the previewed page to the canvas (the "Load Collection" action).
-    function commitCollection() {
+    // Closes the modal immediately, then preloads thumbnails behind a canvas overlay
+    // before revealing the collection — no visual pop or half-loaded tiles.
+    async function commitCollection() {
       if (!previewList.length || !previewProvider) return;
       const provider = previewProvider;
-      loadSourceOntoCanvas(previewList, provider);
-      buildDensityInstances();
-      addBookmarkNodes(provider);            // bring this collection's bookmarks along
-      setBreadcrumb(provider, currentCollectionLabel);
+      const list = previewList.slice();
       closeImport();
+
+      const overlay = document.getElementById('canvas-loading');
+      const label   = document.getElementById('cl-label');
+      overlay.classList.remove('fade-out');
+      overlay.classList.add('show');
+      label.textContent = `Loading ${list.length} images…`;
+
+      // Preload thumbs in parallel batches of 12 so the browser isn't overwhelmed.
+      let done = 0;
+      const total = list.length;
+      const BATCH = 12;
+      const loadOne = (res) => new Promise((resolve) => {
+        const url = res.source === 'aic' ? res.thumb : proxied(res.thumb);
+        const img = new Image();
+        img.onload = img.onerror = () => {
+          done++;
+          if (done % 8 === 0 || done === total)
+            label.textContent = `Loading ${done} / ${total}…`;
+          resolve();
+        };
+        img.src = url;
+      });
+      for (let i = 0; i < total; i += BATCH) {
+        await Promise.all(list.slice(i, i + BATCH).map(loadOne));
+      }
+
+      loadSourceOntoCanvas(list, provider);
+      buildDensityInstances();
+      addBookmarkNodes(provider);
+      setBreadcrumb(provider, currentCollectionLabel);
+
+      overlay.classList.add('fade-out');
+      setTimeout(() => overlay.classList.remove('show', 'fade-out'), 500);
     }
 
     // Commit a collection WITHOUT the modal (used by bookmark fly-to navigation).
@@ -3757,6 +3918,40 @@
       showDock();   // arm the initial timer
     }
 
+    // Draggable bottom sheets — touch-drag the header down to dismiss, up to expand.
+    function setupDraggableSheets() {
+      ['panel', 'bookmarks'].forEach((id) => {
+        const sheet = document.getElementById(id);
+        if (!sheet) return;
+        const header = sheet.querySelector('.insp-head');
+        if (!header) return;
+        let startY = 0, startH = 0, active = false;
+        header.addEventListener('touchstart', (e) => {
+          if (!sheet.classList.contains('open')) return;
+          startY = e.touches[0].clientY;
+          startH = sheet.offsetHeight;
+          active = true;
+          sheet.style.transition = 'none';
+        }, { passive: true });
+        window.addEventListener('touchmove', (e) => {
+          if (!active) return;
+          const dy = e.touches[0].clientY - startY;
+          if (dy > 0) sheet.style.maxHeight = Math.max(80, startH - dy) + 'px';
+        }, { passive: true });
+        window.addEventListener('touchend', (e) => {
+          if (!active) return;
+          active = false;
+          sheet.style.transition = '';
+          const dy = e.changedTouches[0].clientY - startY;
+          sheet.style.maxHeight = '';
+          if (dy > 90) {
+            if (id === 'panel') closeFilters();
+            else closeBookmarks();
+          }
+        }, { passive: true });
+      });
+    }
+
     // Window-wide drag & drop — open My Uploads and stage the files for preview.
     function setupWindowDrop() {
       const veil = document.getElementById('dropveil');
@@ -3873,6 +4068,7 @@
       }
       focus.active = false;
       focus.mesh   = null;
+      focusPan.x = focusPan.y = 0;
       document.getElementById('info').classList.remove('show');
       // Fly the camera back to where it was before the focus.
       autoTarget = focus.returnPos.clone();
@@ -3939,6 +4135,11 @@
     };
 
     const keys = new Set();
+    // Offset applied to the camera while a focused image fills the screen — allows
+    // the user to pan within an image that's wider than the viewport (e.g. panoramics).
+    // Reset to zero on dismiss.
+    let focusPan = { x: 0, y: 0 };
+
     let uiDismissed = false;
     function dismissUI() {
       if (uiDismissed) return;
@@ -3961,9 +4162,16 @@
       const dx = e.clientX - ctrl.dragStart.x;
       const dy = e.clientY - ctrl.dragStart.y;
       if (Math.hypot(dx, dy) > 6) ctrl.didDrag = true;
-      if (ctrl.didDrag && !focus.active) {
-        ctrl.targetVel.x -= (e.clientX - ctrl.lastMouse.x) * 0.025;
-        ctrl.targetVel.y += (e.clientY - ctrl.lastMouse.y) * 0.025;
+      if (ctrl.didDrag) {
+        if (focus.active && focus.mesh) {
+          // Pan within the focused image (clamped to image half-width/height).
+          const hw = focus.scaleTarget.x * 0.5, hh = focus.scaleTarget.y * 0.5;
+          focusPan.x = Math.max(-hw, Math.min(hw, focusPan.x - (e.clientX - ctrl.lastMouse.x) * 0.025));
+          focusPan.y = Math.max(-hh, Math.min(hh, focusPan.y + (e.clientY - ctrl.lastMouse.y) * 0.025));
+        } else if (!focus.active) {
+          ctrl.targetVel.x -= (e.clientX - ctrl.lastMouse.x) * 0.025;
+          ctrl.targetVel.y += (e.clientY - ctrl.lastMouse.y) * 0.025;
+        }
       }
       ctrl.lastMouse = { x: e.clientX, y: e.clientY };
     });
@@ -4006,9 +4214,15 @@
         const dx = e.touches[0].clientX - ctrl.dragStart.x;
         const dy = e.touches[0].clientY - ctrl.dragStart.y;
         if (Math.hypot(dx, dy) > 8) ctrl.didDrag = true;
-        if (ctrl.didDrag && !focus.active) {
-          ctrl.targetVel.x -= (e.touches[0].clientX - ctrl.lastMouse.x) * 0.025;
-          ctrl.targetVel.y += (e.touches[0].clientY - ctrl.lastMouse.y) * 0.025;
+        if (ctrl.didDrag) {
+          if (focus.active && focus.mesh) {
+            const hw = focus.scaleTarget.x * 0.5, hh = focus.scaleTarget.y * 0.5;
+            focusPan.x = Math.max(-hw, Math.min(hw, focusPan.x - (e.touches[0].clientX - ctrl.lastMouse.x) * 0.025));
+            focusPan.y = Math.max(-hh, Math.min(hh, focusPan.y + (e.touches[0].clientY - ctrl.lastMouse.y) * 0.025));
+          } else if (!focus.active) {
+            ctrl.targetVel.x -= (e.touches[0].clientX - ctrl.lastMouse.x) * 0.025;
+            ctrl.targetVel.y += (e.touches[0].clientY - ctrl.lastMouse.y) * 0.025;
+          }
         }
         ctrl.lastMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
       } else if (e.touches.length === 2 && ctrl.pinch != null) {
@@ -4122,8 +4336,9 @@
         // Smoothly animate camera to the focus target; suppress free movement.
         ctrl.velocity.set(0, 0, 0);
         ctrl.targetVel.set(0, 0, 0);
-        ctrl.basePos.x = lerp(ctrl.basePos.x, focus.target.x, 0.055);
-        ctrl.basePos.y = lerp(ctrl.basePos.y, focus.target.y, 0.055);
+        // focusPan lets the user pan within a wide/tall image; lerp toward target+offset.
+        ctrl.basePos.x = lerp(ctrl.basePos.x, focus.target.x + focusPan.x, 0.055);
+        ctrl.basePos.y = lerp(ctrl.basePos.y, focus.target.y + focusPan.y, 0.055);
         ctrl.basePos.z = lerp(ctrl.basePos.z, focus.target.z, 0.055);
         // Ease the plane toward its hi-res true size (no-op until that load lands).
         if (focus.mesh) {
@@ -4472,7 +4687,7 @@
         pill.classList.toggle('is-denied', s === 'denied');
         const txt = $('gesture-pill-text'), act = $('gesture-pill-action');
         if (s === 'requesting')   { pill.classList.add('show'); txt.textContent = pendingActivation ? 'Show your hand to the camera' : 'Starting camera…'; act.style.display = 'none'; }
-        else if (s === 'denied')  { pill.classList.add('show'); txt.textContent = 'Camera permission required'; act.style.display = ''; act.textContent = 'Retry'; }
+        else if (s === 'denied')  { pill.classList.add('show'); txt.textContent = 'Camera permission required'; act.style.display = ''; act.textContent = 'Retry'; setTimeout(() => { if (state === 'denied') pill.classList.remove('show'); }, 5000); }
         else if (s === 'active')  { pill.classList.add('show'); txt.textContent = 'Gesture navigation active'; act.style.display = ''; act.textContent = 'Stop'; setTimeout(() => { if (state === 'active') pill.classList.remove('show'); }, 2600); }
         else { pill.classList.remove('show'); }
         if (window.__refreshDock) window.__refreshDock();   // keep dock visible while gesturing
@@ -4556,6 +4771,7 @@
     setupImport();
     setupDock();
     setupDockAutoHide();
+    setupDraggableSheets();
     setupWindowDrop();
     loadBookmarkIds();
     loadUploads();
