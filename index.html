@@ -84,7 +84,7 @@
     #info {
       position: fixed; top: 50%; left: 50%;
       transform: translateX(-50%);
-      display: flex; align-items: center; gap: 16px;
+      display: flex; flex-direction: column; align-items: stretch; gap: 6px;
       background: var(--bg);
       border: 1px solid var(--line);
       padding: 10px 20px;
@@ -99,7 +99,9 @@
     #info.show { opacity: 1; }
     #info-title { color: var(--text); }
     #info-sep, .info-sep { color: var(--line-2); }
-    .info-row-meta { display: contents; }
+    .info-row-title { display: flex; align-items: center; gap: 16px; }
+    #info-title { flex: 1; min-width: 0; }
+    .info-row-meta { display: flex; align-items: center; gap: 10px; }
     #info-link {
       color: var(--text-2); text-decoration: none; cursor: pointer; pointer-events: auto;
       border-bottom: 1px solid var(--line-2); transition: color 0.15s, border-color 0.15s;
@@ -759,10 +761,10 @@
     .src-abbr { display: none; }
 
     /* ── Gesture icon — same visual weight as all other dock icons ── */
-    #dock-gesture svg { stroke-width: 1.8; }
+    #dock-gesture svg { width: 20px; height: 20px; stroke-width: 1.8; }
 
     /* ── Info bar bookmark — pushed to far right ── */
-    #info-bm { margin-left: auto; }
+    .info-sep-title { display: none; }
 
     /* ── Canvas loading overlay ── */
     #canvas-loading {
@@ -895,9 +897,8 @@
         white-space: normal;
         border-left: none; border-right: none; border-bottom: none;
       }
-      #info-title { white-space: normal; word-break: break-word; width: 100%; }
-      .info-sep-title { display: none; }
-      .info-row-meta { display: flex !important; align-items: center; gap: 10px; flex-wrap: wrap; }
+      #info-title { white-space: normal; word-break: break-word; }
+      .info-row-meta { flex-wrap: wrap; }
       .gt-card, .dc-card { padding: 20px; }
 
       /* Comfier touch targets for filter chips */
@@ -912,9 +913,6 @@
 
       /* Modals/panels cap at dock width so nothing overflows */
       #music-panel { max-width: calc(100vw - 12px); }
-
-      /* Info bar bookmark right-align on mobile too */
-      .info-row-meta { width: 100%; }
 
       /* Draggable sheet handle — tap area for the drag grip */
       .insp-head { cursor: grab; touch-action: pan-y; }
@@ -983,15 +981,16 @@
   </div>
 
   <div id="info">
-    <span id="info-title"></span>
-    <span class="info-sep info-sep-title">·</span>
+    <div class="info-row-title">
+      <span id="info-title"></span>
+      <button id="info-bm" title="Bookmark (B)"><svg viewBox="0 0 24 24"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-5-7 5V4a1 1 0 0 1 1-1z" stroke-linejoin="round"/></svg></button>
+    </div>
     <div class="info-row-meta">
       <span id="info-src">Art Institute of Chicago</span>
       <a id="info-link" target="_blank" rel="noopener noreferrer" style="display:none">View record ↗</a>
       <span id="info-link-sep" class="info-sep" style="display:none">·</span>
       <span class="info-sep">·</span>
       <span id="info-esc">ESC to close</span>
-      <button id="info-bm" title="Bookmark (B)"><svg viewBox="0 0 24 24"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-5-7 5V4a1 1 0 0 1 1-1z" stroke-linejoin="round"/></svg></button>
     </div>
   </div>
 
@@ -1057,7 +1056,7 @@
 
   <!-- Usage-rights disclaimer -->
   <button id="info-fab" title="About &amp; usage rights" aria-label="About and usage rights">
-    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5" stroke-linecap="round"/><circle cx="12" cy="7.8" r="0.7" fill="currentColor" stroke="none"/></svg>
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 10.5v5" stroke-linecap="round"/><circle cx="12" cy="7.5" r="0.75" fill="currentColor" stroke="none"/></svg>
   </button>
   <div id="disclaimer" role="dialog" aria-modal="true" aria-label="Usage and rights">
     <div class="dc-card">
@@ -2688,6 +2687,10 @@
       bhl: 'Biodiversity Heritage Library', smithsonian: 'Smithsonian', wikimedia: 'Wikimedia Commons',
       uploads: 'My Uploads', own: 'Own Links', explore: 'Explore (AIC)',
     };
+    const SOURCE_ABBR = {
+      aic: 'AIC', bhl: 'BHL', internetArchive: 'Archive', smithsonian: 'SI',
+      wikimedia: 'Commons', uploads: 'Uploads', own: 'Links', explore: 'Explore',
+    };
 
     // "Own Links" — paste image URLs / public Dropbox / Google Drive share links.
     function parseOwnLinks(text) {
@@ -3603,8 +3606,11 @@
     function setBreadcrumb(provider, label) {
       // Keep the dock's "Add Images" source badge in sync with the active source.
       const badge = document.getElementById('dock-source');
-      if (badge) badge.textContent = (!provider || provider === 'explore')
-        ? 'Explore' : (SOURCE_NAME[provider] || provider);
+      if (badge) {
+        const isMobile = window.matchMedia('(max-width: 640px)').matches;
+        const full = (!provider || provider === 'explore') ? 'Explore' : (SOURCE_NAME[provider] || provider);
+        badge.textContent = isMobile ? (SOURCE_ABBR[provider] || full) : full;
+      }
 
       const el = document.getElementById('breadcrumb');
       if (!el) return;
