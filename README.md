@@ -20,6 +20,7 @@ Built as a single HTML file. No framework, no build step.
 | Source | Content |
 |---|---|
 | Art Institute of Chicago | Public-domain paintings, prints, photos |
+| WikiMedia Commons | publicly accessible online library of free-to-use images |
 | NASA | Space imagery and mission photography |
 | The Met | Metropolitan Museum of Art collection |
 | Smithsonian | Cross-institution collections |
