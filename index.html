@@ -4154,8 +4154,14 @@
       setTimeout(() => document.getElementById('label').classList.add('fade'), 2600);
     }
 
+    // iOS/Android fire synthetic mouse events ~300ms after touchend.
+    // Block them so a tap on a focused image doesn't immediately re-focus it.
+    let lastTouchEnd = 0;
+    const TOUCH_GUARD_MS = 500;
+
     // Pointer — separate drag from click by tracking total movement.
     canvas.addEventListener('mousedown', (e) => {
+      if (Date.now() - lastTouchEnd < TOUCH_GUARD_MS) return;
       ctrl.isDragging = true;
       ctrl.didDrag    = false;
       ctrl.dragStart  = { x: e.clientX, y: e.clientY };
@@ -4242,6 +4248,7 @@
       }
     }, { passive: true });
     canvas.addEventListener('touchend', (e) => {
+      lastTouchEnd = Date.now();
       if (!ctrl.didDrag && e.changedTouches.length === 1)
         handleClick(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
       ctrl.isDragging = false; ctrl.didDrag = false; ctrl.pinch = null;
