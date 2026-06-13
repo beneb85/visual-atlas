@@ -894,11 +894,15 @@
       .ic-results { grid-template-columns: repeat(3, 1fr); }
       .ic-foot { flex-wrap: wrap; gap: 10px; padding: 12px 16px; }
 
-      /* Dock → compact bar that fits the width */
+      /* Dock → compact bar that fits the width. The Navigate button is hidden on
+         mobile: it's a passive mode/zoom readout, not an action (tapping empty space
+         already returns to navigation), so dropping it frees width for larger,
+         easier-to-hit touch targets. */
       #dock { bottom: 12px; gap: 0; padding: 3px; max-width: calc(100vw - 12px); }
-      .dock-btn { padding: 9px 7px; }
-      .dock-btn svg { width: 17px; height: 17px; }
-      #dock-add { padding: 9px 10px; gap: 6px; }
+      #dock-nav { display: none; }
+      .dock-btn { padding: 11px 11px; }
+      .dock-btn svg { width: 19px; height: 19px; }
+      #dock-add { padding: 11px 12px; gap: 6px; }
       .dock-source { font-size: 8px; letter-spacing: 0.06em; }
       .dock-div { margin: 4px 2px; }
 
@@ -1778,21 +1782,23 @@
     // Camera target that frames the whole cluster layout (aspect-aware, margin).
     function clusterViewTarget() {
       if (!personalMeshes.length) return new THREE.Vector3(0, 0, 60);
-      const c = new THREE.Vector3();
-      for (const m of personalMeshes) c.add(m.userData.clusterPos);
-      c.divideScalar(personalMeshes.length);
-      let maxX = 1, maxY = 1, maxZ = 0;
+      // Frame on the BOUNDING-BOX centre (not the mass centroid): a dense group must
+      // not pull the camera off so the sparse side falls out of frame. This keeps the
+      // whole layout centred on every screen aspect — important on narrow phones.
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
       for (const m of personalMeshes) {
         const p = m.userData.clusterPos;
-        maxX = Math.max(maxX, Math.abs(p.x - c.x) + m.scale.x * 0.5);
-        maxY = Math.max(maxY, Math.abs(p.y - c.y) + m.scale.y * 0.5);
-        maxZ = Math.max(maxZ, Math.abs(p.z - c.z));
+        minX = Math.min(minX, p.x - m.scale.x * 0.5); maxX = Math.max(maxX, p.x + m.scale.x * 0.5);
+        minY = Math.min(minY, p.y - m.scale.y * 0.5); maxY = Math.max(maxY, p.y + m.scale.y * 0.5);
+        minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
       }
+      const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, cz = (minZ + maxZ) / 2;
+      const halfW = Math.max((maxX - minX) / 2, 1), halfH = Math.max((maxY - minY) / 2, 1), halfD = (maxZ - minZ) / 2;
       const halfFov = THREE.MathUtils.degToRad(CAMERA_FOV * 0.5);
-      const dV = maxY / Math.tan(halfFov);
-      const dH = maxX / (Math.tan(halfFov) * camera.aspect);
-      const dist = Math.max(dV, dH) * 1.15 + maxZ + 25;
-      return new THREE.Vector3(c.x, c.y, c.z + dist);
+      const dV = halfH / Math.tan(halfFov);
+      const dH = halfW / (Math.tan(halfFov) * camera.aspect);
+      const dist = Math.max(dV, dH) * 1.15 + halfD + 25;
+      return new THREE.Vector3(cx, cy, cz + dist);
     }
 
     // ── Filtering ──
@@ -1847,6 +1853,8 @@
       document.getElementById('mode-cluster').classList.toggle('active', mode === 'cluster');
       // The "Cluster by" dropdown only belongs to the Cluster tab — hidden in Explore.
       document.getElementById('cluster-row').style.display = mode === 'cluster' ? '' : 'none';
+      // Clear any leftover pan/scroll momentum so it can't instantly cancel the framing fly.
+      ctrl.velocity.set(0, 0, 0); ctrl.targetVel.set(0, 0, 0);
       if (mode === 'cluster') {
         computeClusterPositions();
         autoTarget = clusterViewTarget();
@@ -1856,7 +1864,10 @@
     }
     function setClusterBy(by) {
       clusterBy = by;
-      if (viewMode === 'cluster') { computeClusterPositions(); autoTarget = clusterViewTarget(); }
+      if (viewMode === 'cluster') {
+        ctrl.velocity.set(0, 0, 0); ctrl.targetVel.set(0, 0, 0);
+        computeClusterPositions(); autoTarget = clusterViewTarget();
+      }
     }
 
     // Which axes is the CURRENT collection MEANINGFULLY organised by? Not just
@@ -2052,15 +2063,17 @@
       });
 
       // Hide filter sections that have nothing useful to filter, so the panel
-      // reflects only what the active collection MEANINGFULLY exposes. Colour uses
-      // the same meaningfulness test as clustering (a near-monochrome set offers no
-      // real colour choice), so clusters and filters stay consistent.
+      // reflects only what the active collection exposes. The colour FILTER shows
+      // whenever ≥2 distinct colours are present in filterable amounts — consistent
+      // across every collection (like the AIC site's colour facet). The stricter
+      // "near-monochrome" test (avail.color) still gates only the colour CLUSTER,
+      // where a single-hue set would collapse the hue-wheel into a blob.
       const avail = attrAvailability();
       const toggleSec = (id, on) => { const e = document.getElementById(id); if (e) e.style.display = on ? '' : 'none'; };
       toggleSec('sec-date',   dateSpanMax > dateSpanMin);
       toggleSec('sec-loc',    locWrap.children.length > 1);
       toggleSec('sec-orient', orientWrap.children.length > 0);
-      toggleSec('sec-color',  colWrap.children.length > 0 && avail.color);
+      toggleSec('sec-color',  colWrap.children.length > 1);
       toggleSec('sec-tags',   tagWrap.children.length > 0);
 
       // Keep the Cluster-by dropdown honest about what THIS collection supports.
@@ -3015,7 +3028,14 @@
       if (canvasSource !== cid) {
         if (cid === 'uploads') loadUploadsOntoCanvas();
         else if (cid === 'explore') goExplore();
-        else { currentCollectionLabel = 'Highlights'; await loadCollection(cid, DEFAULT_QUERY[cid] || '', 0); }
+        else {
+          // The bookmark lives in a catalogue that isn't loaded — fetch it first,
+          // showing the canvas spinner so the wait isn't a blank, frozen screen.
+          currentCollectionLabel = 'Highlights';
+          showCanvasLoading(`Loading ${SOURCE_NAME[cid] || cid}…`);
+          try { await loadCollection(cid, DEFAULT_QUERY[cid] || '', 0); }
+          finally { hideCanvasLoading(); }
+        }
       }
       // Match by STABLE per-collection assetId (deduped to one mesh). The old
       // nodeId-first lookup was unsafe across sessions — nodeId resets to 0 each
@@ -3235,11 +3255,14 @@
       const cores = navigator.hardwareConcurrency || 4;
       const touch = navigator.maxTouchPoints > 0;
       const small = Math.min(window.innerWidth, window.innerHeight) < 740;
-      if (touch && small) return 80;                       // phone
-      if (touch)          return 130;                      // tablet
-      if (mem >= 8 && cores >= 8) return 400;              // desktop
-      if (mem >= 8 || cores >= 8) return 280;              // strong laptop
-      return 180;                                          // laptop
+      // Larger working sets — the nodeBudget FPS guard hides excess nodes if a device
+      // can't keep up, so these are ceilings, not guarantees. Pagination in the modal
+      // reaches the rest of a deep result set (an AIC "cats" search has 1000s).
+      if (touch && small) return 150;                      // phone
+      if (touch)          return 220;                      // tablet
+      if (mem >= 8 && cores >= 8) return 500;              // desktop
+      if (mem >= 8 || cores >= 8) return 350;              // strong laptop
+      return 240;                                          // laptop
     }
     let optimalCount = 200;
     let nodeBudget   = Infinity;   // FPS-guard soft cap (hides excess nodes)
@@ -3558,6 +3581,25 @@
       + '</svg>'
       + `<span>${label || 'Loading…'}</span></div>`;
 
+    // Full-screen canvas spinner — shared by collection commit AND bookmark fly-to,
+    // so jumping to a bookmark whose catalogue isn't loaded yet shows progress.
+    function showCanvasLoading(label) {
+      const overlay = document.getElementById('canvas-loading');
+      const lbl = document.getElementById('cl-label');
+      if (lbl) lbl.textContent = label || 'Loading collection…';
+      overlay.classList.remove('fade-out');
+      overlay.classList.add('show');
+    }
+    function setCanvasLoadingLabel(label) {
+      const lbl = document.getElementById('cl-label');
+      if (lbl) lbl.textContent = label;
+    }
+    function hideCanvasLoading() {
+      const overlay = document.getElementById('canvas-loading');
+      overlay.classList.add('fade-out');
+      setTimeout(() => overlay.classList.remove('show', 'fade-out'), 500);
+    }
+
     function openImport(forced) {
       closeFilters(); closeBookmarks();   // modal owns the screen
       document.getElementById('import').classList.add('open');
@@ -3715,11 +3757,7 @@
       const list = previewList.slice();
       closeImport();
 
-      const overlay = document.getElementById('canvas-loading');
-      const label   = document.getElementById('cl-label');
-      overlay.classList.remove('fade-out');
-      overlay.classList.add('show');
-      label.textContent = `Loading ${list.length} images…`;
+      showCanvasLoading(`Loading ${list.length} images…`);
 
       // Preload thumbs in parallel batches of 12 so the browser isn't overwhelmed.
       let done = 0;
@@ -3731,7 +3769,7 @@
         img.onload = img.onerror = () => {
           done++;
           if (done % 8 === 0 || done === total)
-            label.textContent = `Loading ${done} / ${total}…`;
+            setCanvasLoadingLabel(`Loading ${done} / ${total}…`);
           resolve();
         };
         img.src = url;
@@ -3745,8 +3783,7 @@
       addBookmarkNodes(provider);
       setBreadcrumb(provider, currentCollectionLabel);
 
-      overlay.classList.add('fade-out');
-      setTimeout(() => overlay.classList.remove('show', 'fade-out'), 500);
+      hideCanvasLoading();
     }
 
     // Commit a collection WITHOUT the modal (used by bookmark fly-to navigation).
@@ -4415,15 +4452,18 @@
         ctrl.targetVel.z *= VELOCITY_DECAY;
       }
 
-      // Auto-fly to a framing target (e.g. when entering cluster mode). Any user
-      // input — drag, keys, or a wheel impulse — immediately hands back control.
+      // Auto-fly to a framing target (e.g. when entering cluster mode). An INTENTIONAL
+      // input — an actual drag, keys, or a wheel/scroll impulse — hands control back.
+      // A plain tap/click (isDragging for a frame, but no movement) must NOT cancel the
+      // flight: on mobile, tapping to dismiss the filter sheet or focus a node would
+      // otherwise strand the camera before it ever frames the (off-origin) cluster.
       if (autoTarget && !focus.active) {
         ctrl.basePos.x = lerp(ctrl.basePos.x, autoTarget.x, 0.06);
         ctrl.basePos.y = lerp(ctrl.basePos.y, autoTarget.y, 0.06);
         ctrl.basePos.z = lerp(ctrl.basePos.z, autoTarget.z, 0.06);
-        const userInput = ctrl.isDragging || keys.size ||
-          (Math.abs(ctrl.targetVel.x) + Math.abs(ctrl.targetVel.y) + Math.abs(ctrl.targetVel.z)) > 0.5;
-        if (userInput || ctrl.basePos.distanceTo(autoTarget) < 1.5) autoTarget = null;
+        const realDrag = ctrl.isDragging && ctrl.didDrag;
+        const impulse  = (Math.abs(ctrl.targetVel.x) + Math.abs(ctrl.targetVel.y) + Math.abs(ctrl.targetVel.z)) > 0.5;
+        if (realDrag || keys.size || impulse || ctrl.basePos.distanceTo(autoTarget) < 1.5) autoTarget = null;
       }
 
       // Subtle idle drift — the field never feels completely static.
