@@ -71,13 +71,14 @@
     }
 
     #hint {
-      position: fixed; bottom: 28px; left: 50%;
+      position: fixed; bottom: 80px; left: 50%;
       transform: translateX(-50%);
       font-family: var(--mono);
       font-size: 10px; letter-spacing: 0.12em;
-      color: var(--text-4);
+      color: #fff;
       pointer-events: none; z-index: 20;
       transition: opacity 1s ease;
+      white-space: nowrap;
     }
 
     /* ── Artwork info bar (positioned below the focused image, top set in JS) ── */
@@ -902,6 +903,7 @@
       .dock-div { margin: 4px 2px; }
 
       /* Floating elements lift above the dock so nothing overlaps it */
+      #hint { bottom: 70px; }
       #gesture-selfview { width: 112px; height: 84px; bottom: 70px; left: 10px; }
       #info-fab { bottom: auto; top: 12px; right: 12px; }
       #music-panel { width: calc(100vw - 20px); bottom: 70px; }
