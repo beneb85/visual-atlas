@@ -276,21 +276,18 @@
     .dock-btn:hover { background: var(--hover); color: var(--text); }
     .dock-btn.active { background: var(--hover); color: var(--text); border-color: var(--line); }
     .dock-btn.disabled { opacity: 0.32; cursor: default; pointer-events: none; }
-    .dock-btn.on-badge { color: var(--text); }
-    .dock-btn.on-badge svg { stroke: var(--text); }
+    /* Active state is signalled ONLY by the green dot — the icon keeps its normal
+       muted stroke, so no button (bookmarks included) lights up white by default. */
     .dock-lbl { display: none; }
     .dock-sub  { display: none; }
     /* Active-state dot badge (replaces sub-label text in icon-only mode) */
+    /* One consistent active indicator across the whole dock: a small green dot.
+       Filters applied, music playing, bookmarks present, gesture running — all green. */
     .dock-btn.on-badge::before {
       content: ''; position: absolute; top: 6px; right: 6px;
       width: 5px; height: 5px; border-radius: 50%;
-      background: var(--text); pointer-events: none;
+      background: #24CB71; pointer-events: none;
     }
-    #dock-bookmarks.on-badge::before { background: #f59e0b; }
-    #dock-filters.on-badge::before   { background: var(--text); }
-    /* Live "active" elements (music playing, gesture running) → green dot */
-    #dock-music.on-badge::before,
-    #dock-gesture.on-badge::before   { background: #24CB71; }
     .dock-div { width: 1px; align-self: stretch; background: var(--line); margin: 4px 4px; }
 
     /* Add Images — primary dock action: icon + live source badge, emphasized */
@@ -308,8 +305,6 @@
       color: var(--text-2); font-family: var(--mono); white-space: nowrap;
     }
     .dock-count { font-size: 8px; color: var(--text-3); font-family: var(--mono); }
-    #dock-bookmarks.on-badge svg { stroke: var(--text); }
-    #dock-bookmarks.on-badge .dock-count { color: var(--text); }
 
     /* ── Music Panel ── */
     #music-panel {
@@ -343,22 +338,32 @@
     .mp-play svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.5; }
     .mp-vol { display: flex; align-items: center; gap: 8px; flex: 1; }
     .mp-vol svg { width: 14px; height: 14px; stroke: var(--text-3); fill: none; stroke-width: 1.5; flex-shrink: 0; }
+    /* The visible track stays a 2px line, but the input itself is 28px tall so the
+       whole strip is an easy touch target on phones. touch-action keeps iOS from
+       hijacking the drag as a page gesture. */
     #mp-volume {
       flex: 1; -webkit-appearance: none; appearance: none;
-      height: 2px; background: var(--line-2); outline: none; cursor: pointer;
+      height: 28px; background: transparent; outline: none; cursor: pointer;
+      margin: 0; touch-action: none;
+    }
+    #mp-volume::-webkit-slider-runnable-track {
+      height: 2px; background: var(--line-2); border-radius: 2px;
     }
     #mp-volume::-webkit-slider-thumb {
-      -webkit-appearance: none; width: 10px; height: 10px;
+      -webkit-appearance: none; width: 16px; height: 16px; margin-top: -7px;
       background: var(--text); border-radius: 50%; cursor: pointer;
     }
+    #mp-volume::-moz-range-track {
+      height: 2px; background: var(--line-2); border-radius: 2px;
+    }
     #mp-volume::-moz-range-thumb {
-      width: 10px; height: 10px; background: var(--text);
+      width: 16px; height: 16px; background: var(--text);
       border: none; border-radius: 50%; cursor: pointer;
     }
 
     /* ── Gesture Mode ── */
-    /* dock indicator dots: green = active, amber = camera permission required */
-    #dock-gesture.on-badge::before { background: #24CB71; }
+    /* Active gesture uses the shared green dot; amber is reserved for the distinct
+       "camera permission required" warning state. */
     #dock-gesture.needs-cam::before {
       content: ''; position: absolute; top: 6px; right: 6px;
       width: 5px; height: 5px; border-radius: 50%;
@@ -832,6 +837,12 @@
       transition-delay: 0.2s;
     }
     .dock-btn[data-tip]::after { bottom: calc(100% + 12px); }
+    /* The dock sits bottom-centre, so a centred tooltip on the first/last button
+       overflows the viewport edge. Anchor those to their inner edge instead. */
+    #dock-reset[data-tip]::after { left: auto; right: 0; transform: translateX(0) translateY(4px); }
+    #dock-reset[data-tip]:hover::after { transform: translateX(0) translateY(0); }
+    #dock-add[data-tip]::after { left: 0; transform: translateX(0) translateY(4px); }
+    #dock-add[data-tip]:hover::after { transform: translateX(0) translateY(0); }
 
     /* Full-window drop highlight */
     #dropveil {
@@ -949,7 +960,7 @@
   </style>
 </head>
 <body>
-  <div id="load">Loading artworks…</div>
+  <div id="load">Loading images…</div>
   <canvas id="c"></canvas>
   <div class="vig"></div>
   <div id="wordmark"><span class="wm-mark"></span><span class="wm-text">Visual<b>Atlas</b></span></div>
@@ -1348,12 +1359,13 @@
       // The AIC API ships a pre-analyzed dominant color {h,s,l} per artwork — we
       // bucket it into a hue family so the art can be filtered by color too.
       const page = async (p) => {
-        const url = `https://api.artic.edu/api/v1/artworks/search?boost=true&query[term][is_public_domain]=true&fields=image_id,title,color&limit=100&page=${p}`;
+        const url = `https://api.artic.edu/api/v1/artworks/search?boost=true&query[term][is_public_domain]=true&fields=id,image_id,title,color&limit=100&page=${p}`;
         const r = await fetch(url);
         return (await r.json()).data
           .filter((a) => a.image_id)
           .map((a) => ({
             id: a.image_id,
+            recordId: a.id || null,   // artwork id → artic.edu/artworks/{id} record link
             title: a.title || '',
             bucket: a.color ? bucketFromHsl(a.color.h, a.color.s / 100) : null,
           }));
@@ -1370,6 +1382,10 @@
 
     const mediaTitle  = (idx) => mediaPool[idx % mediaPool.length].title || '';
     const mediaBucket = (idx) => mediaPool[idx % mediaPool.length].bucket;
+    const mediaRecord = (idx) => {
+      const r = mediaPool[idx % mediaPool.length].recordId;
+      return r ? 'https://www.artic.edu/artworks/' + r : '';
+    };
 
     /* ════════════════════════════════════════════════════════════════════════
        Renderer + perspective camera. The camera flies through Z-space:
@@ -1529,7 +1545,7 @@
     const personalMeshes = [];
 
     let viewMode      = 'explore';   // 'explore' | 'cluster'
-    let clusterBy     = 'location';
+    let clusterBy     = 'date';
     let aicVisibility = 1;           // AIC art fades out in cluster mode
     let autoTarget    = null;        // camera auto-fly target (cluster framing)
     let ambientActive = true;        // infinite field on? (off after an upload replaces the canvas)
@@ -1856,6 +1872,12 @@
       // Clear any leftover pan/scroll momentum so it can't instantly cancel the framing fly.
       ctrl.velocity.set(0, 0, 0); ctrl.targetVel.set(0, 0, 0);
       if (mode === 'cluster') {
+        // Always enter clustering on the Date axis (chronological is the most legible
+        // default). updateClusterAvailability() falls back if a collection has no dates.
+        clusterBy = 'date';
+        const sel = document.getElementById('cluster-by');
+        if (sel) sel.value = 'date';
+        updateClusterAvailability();
         computeClusterPositions();
         autoTarget = clusterViewTarget();
       } else {
@@ -2880,8 +2902,10 @@
     let   musicAudio   = null;
     let   musicCtx     = null;
     let   musicAnalyser= null;
+    let   musicGain    = null;
     let   musicDataArr = null;
     let   musicRaf     = null;
+    let   musicVolume  = 0.7;   // desired level; applied via GainNode (iOS-safe)
 
     function initMusicPanel() {
       // Build waveform bars once
@@ -2896,9 +2920,13 @@
 
     function ensureMusicAudio() {
       if (musicAudio) return;
+      musicVolume = parseFloat(document.getElementById('mp-volume').value || 0.7);
       musicAudio = new Audio(MUSIC_SRC);
       musicAudio.loop = true;
-      musicAudio.volume = parseFloat(document.getElementById('mp-volume').value || 0.7);
+      musicAudio.crossOrigin = 'anonymous';
+      // iOS Safari ignores writes to HTMLMediaElement.volume, so element volume is left
+      // at 1 and real level control happens on the Web Audio GainNode (see below).
+      musicAudio.volume = musicVolume;
       musicAudio.addEventListener('play',  onMusicPlay);
       musicAudio.addEventListener('pause', onMusicPause);
       musicAudio.addEventListener('ended', onMusicPause);
@@ -2910,9 +2938,22 @@
       musicAnalyser = musicCtx.createAnalyser();
       musicAnalyser.fftSize = 256;   // 128 bins; we'll sample ~24 from the musical range
       musicDataArr  = new Uint8Array(musicAnalyser.frequencyBinCount);
+      musicGain = musicCtx.createGain();
+      musicGain.gain.value = musicVolume;
       const src = musicCtx.createMediaElementSource(musicAudio);
+      // src → gain → destination is the audible (volume-controlled) path; the analyser
+      // taps the source separately so the waveform reflects the track, not the volume.
+      src.connect(musicGain);
+      musicGain.connect(musicCtx.destination);
       src.connect(musicAnalyser);
-      musicAnalyser.connect(musicCtx.destination);
+    }
+
+    // Single source of truth for level — sets both the GainNode (works on iOS) and the
+    // element volume (desktop, when no AudioContext exists yet).
+    function setMusicVolume(v) {
+      musicVolume = Math.max(0, Math.min(1, v));
+      if (musicGain) musicGain.gain.value = musicVolume;
+      if (musicAudio) { try { musicAudio.volume = musicVolume; } catch (e) {} }
     }
 
     function onMusicPlay() {
@@ -3258,8 +3299,8 @@
       // Larger working sets — the nodeBudget FPS guard hides excess nodes if a device
       // can't keep up, so these are ceilings, not guarantees. Pagination in the modal
       // reaches the rest of a deep result set (an AIC "cats" search has 1000s).
-      if (touch && small) return 150;                      // phone
-      if (touch)          return 220;                      // tablet
+      if (touch && small) return 120;                      // phone
+      if (touch)          return 200;                      // tablet
       if (mem >= 8 && cores >= 8) return 500;              // desktop
       if (mem >= 8 || cores >= 8) return 350;              // strong laptop
       return 240;                                          // laptop
@@ -3275,9 +3316,20 @@
         const purl = res.source === 'aic' ? res.thumb : proxied(res.thumb);   // AIC IIIF is CORS-clean
         const m = addImportedMesh({
           id: res.id, title: res.title, thumbnailUrl: purl, imageUrl: res.image,
-          source: res.source, metadata: res.metadata, aspect: 1, dominantColor: '#8a8a8a',
+          source: res.source, metadata: res.metadata,
+          aspect: (res._w && res._h) ? res._w / res._h : 1,
+          dominantColor: res._color || '#8a8a8a',
         }, { batch: true });
-        if (m) refineRemoteMesh(m, purl, res.thumb);
+        if (m) {
+          if (res._w && res._h) {
+            // Dimensions + colour were captured during the commit preload — set the
+            // true (clamped) aspect NOW so the plane never pops from square once shown.
+            setMeshAspect(m, res._w, res._h);
+            m.userData.bucket = colorBucket(m.userData.photo.dominantColor);
+          } else {
+            refineRemoteMesh(m, purl, res.thumb);   // no preload (bookmark path) → async refine
+          }
+        }
       }
       placeConstellation();
       nodeBudget = personalMeshes.length;   // reset FPS guard for the new collection
@@ -3757,25 +3809,39 @@
       const list = previewList.slice();
       closeImport();
 
-      showCanvasLoading(`Loading ${list.length} images…`);
-
-      // Preload thumbs in parallel batches of 12 so the browser isn't overwhelmed.
-      let done = 0;
       const total = list.length;
-      const BATCH = 12;
+      showCanvasLoading(`Loading images…`);
+
+      // Load one thumb and CAPTURE its true dimensions + dominant colour, so the mesh
+      // is built at the correct (clamped) aspect on the very first frame — no pop from
+      // square. crossOrigin must match the TextureLoader ('anonymous') so this exact
+      // response is reused from cache when the mesh texture loads; without it the
+      // browser partitions CORS vs non-CORS and re-fetches every image (the old
+      // behaviour that made mobile loads slow and unreliable).
+      let done = 0;
       const loadOne = (res) => new Promise((resolve) => {
         const url = res.source === 'aic' ? res.thumb : proxied(res.thumb);
         const img = new Image();
-        img.onload = img.onerror = () => {
-          done++;
-          if (done % 8 === 0 || done === total)
-            setCanvasLoadingLabel(`Loading ${done} / ${total}…`);
-          resolve();
+        img.crossOrigin = 'anonymous';
+        const finish = () => { done++; resolve(); };
+        img.onload = () => {
+          if (img.naturalWidth && img.naturalHeight) { res._w = img.naturalWidth; res._h = img.naturalHeight; }
+          try { res._color = sampleColor(img); } catch (e) {}
+          finish();
         };
+        img.onerror = finish;
         img.src = url;
       });
-      for (let i = 0; i < total; i += BATCH) {
+
+      // Only BLOCK on the front of the collection (the layer visible at the landing
+      // zoom). Everything deeper streams in afterwards as the viewer flies toward it —
+      // so the reveal is fast even for a 300-image set, instead of waiting for all of
+      // them. Depth-fade hides any aspect refinement on the far tiles.
+      const FRONT = Math.min(total, 60);
+      const BATCH = 10;
+      for (let i = 0; i < FRONT; i += BATCH) {
         await Promise.all(list.slice(i, i + BATCH).map(loadOne));
+        setCanvasLoadingLabel(`Loading ${Math.min(done, FRONT)} / ${FRONT}…`);
       }
 
       loadSourceOntoCanvas(list, provider);
@@ -3784,6 +3850,14 @@
       setBreadcrumb(provider, currentCollectionLabel);
 
       hideCanvasLoading();
+
+      // Warm the remaining thumbnails in the background (non-blocking) so flying deeper
+      // into the field stays smooth without delaying the initial reveal.
+      (async () => {
+        for (let i = FRONT; i < total; i += BATCH) {
+          await Promise.all(list.slice(i, i + BATCH).map(loadOne));
+        }
+      })();
     }
 
     // Commit a collection WITHOUT the modal (used by bookmark fly-to navigation).
@@ -3938,7 +4012,7 @@
       document.getElementById('mp-close').onclick = closeMusic;
       document.getElementById('mp-play').onclick   = toggleMusicPlayback;
       document.getElementById('mp-volume').addEventListener('input', (e) => {
-        if (musicAudio) musicAudio.volume = parseFloat(e.target.value);
+        setMusicVolume(parseFloat(e.target.value));
       });
 
       // Gesture mode — optional hand-tracking nav (camera requested only on enable).
@@ -4134,6 +4208,7 @@
       } else {
         document.getElementById('info-title').textContent = mediaTitle(u.mediaIndex);
         document.getElementById('info-src').textContent = 'Art Institute of Chicago';
+        recordUrl = mediaRecord(u.mediaIndex);
       }
       // Link back to the original archive record when we have one.
       const link = document.getElementById('info-link'), linkSep = document.getElementById('info-link-sep');
@@ -4496,11 +4571,15 @@
       }
 
       // FPS guard — if a big collection is dragging the frame rate down, shrink the
-      // visible node budget (hide the furthest-indexed nodes) until it recovers.
+      // visible node budget (hide the furthest-indexed nodes); GROW it back once the
+      // frame rate recovers, so a brief dip during the initial texture decode doesn't
+      // leave part of the collection permanently hidden until reload.
       frame._fps = frame._fps ? lerp(frame._fps, 1000 / Math.max(dt, 1), 0.08) : 60;
       if (canvasSource !== 'explore' && personalMeshes.length > 120 && now - (frame._fpsT || 0) > 1500) {
         frame._fpsT = now;
         if (frame._fps < 38 && nodeBudget > 100) nodeBudget = Math.floor(nodeBudget * 0.85);
+        else if (frame._fps > 52 && nodeBudget < personalMeshes.length)
+          nodeBudget = Math.min(personalMeshes.length, Math.ceil(nodeBudget * 1.12) + 4);
       }
 
       // Camera chunk (used for chunk loading and fade distance).
