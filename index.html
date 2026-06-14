@@ -689,6 +689,11 @@
       text-transform: uppercase; font-family: var(--mono);
     }
     #own-load:hover { opacity: 0.85; }
+    #pane-own .own-error {
+      margin-top: 12px; font-size: 11.5px; line-height: 1.5; color: #ff9a9a;
+      border-left: 2px solid #ff9a9a; padding-left: 10px;
+    }
+    #pane-own .own-error b { color: #fff; font-weight: 600; }
 
     /* ── Wordmark (top-left) ── */
     #wordmark {
@@ -713,6 +718,13 @@
     #breadcrumb.show { opacity: 1; }
 
     /* upload staging */
+    .up-progress { margin-top: 14px; }
+    .up-progress-bar { height: 4px; background: var(--surface); border: 1px solid var(--line); overflow: hidden; }
+    .up-progress-fill { height: 100%; width: 0%; background: #24CB71; transition: width 0.2s ease; }
+    .up-progress-label {
+      margin-top: 7px; font-size: 11px; color: var(--text-3);
+      font-family: var(--mono); letter-spacing: 0.04em;
+    }
     .up-actions { margin-top: 14px; }
     .up-bulk { display: flex; align-items: center; gap: 8px; }
     .up-bulk button {
@@ -1107,7 +1119,8 @@
   <div id="disclaimer" role="dialog" aria-modal="true" aria-label="Usage and rights">
     <div class="dc-card">
       <div class="dc-h">Usage &amp; Rights</div>
-      <p class="dc-text">I admit no responsibility for any untoward consequences that may arise through reuse of material featured on our site. If you are requiring certainty as to usage rights, then you are encouraged to check with the source institution and make your own investigations.</p>
+      <p class="dc-text">I admit no responsibility for any untoward consequences that may arise through reuse of material featured on this site. If you are requiring certainty as to usage rights, then you are encouraged to check with the source institution and make your own investigations.</p>
+      <p class="dc-text" style="margin-top:14px; font-size:12px; color:var(--text-3);">Music:<br>Into The Deep<br>by Pamela Yuen (Free Music Archive)<br>Licensed under a Creative Commons CC BY</p>
       <button class="dc-btn" id="disclaimer-ok">Understood</button>
     </div>
   </div>
@@ -1167,7 +1180,8 @@
             <button class="src-card" data-src="bhl"><span class="src-name">Biodiversity Heritage Library</span><span class="src-abbr">BHL</span><span class="src-sub">Natural history illustrations</span></button>
             <button class="src-card" data-src="wikimedia"><span class="src-name">Wikimedia Commons</span><span class="src-abbr">Commons</span><span class="src-sub">Free media library</span></button>
             <button class="src-card" data-src="uploads"><span class="src-name">My Uploads</span><span class="src-abbr">Uploads</span><span class="src-sub">Your images</span></button>
-            <button class="src-card" data-src="own"><span class="src-name">Own Links</span><span class="src-abbr">Links</span><span class="src-sub">Dropbox · Drive · URLs</span></button>
+            <!-- Own Links hidden for now (folder links can't be expanded client-side); re-enable by removing style="display:none" -->
+            <button class="src-card" data-src="own" style="display:none"><span class="src-name">Own Links</span><span class="src-abbr">Links</span><span class="src-sub">Dropbox · Drive · URLs</span></button>
           </div>
         </div>
 
@@ -1196,6 +1210,10 @@
             <input type="file" id="file-input" accept="image/*" multiple hidden>
             <input type="file" id="folder-input" webkitdirectory directory multiple hidden>
             <button id="folder-btn" class="folder-btn">📁 Choose a whole folder…</button>
+            <div class="up-progress" id="up-progress" style="display:none">
+              <div class="up-progress-bar"><div class="up-progress-fill" id="up-progress-fill"></div></div>
+              <div class="up-progress-label" id="up-progress-label">Processing…</div>
+            </div>
             <div class="up-actions" id="up-actions" style="display:none">
               <div class="up-bulk">
                 <button id="up-all">Select all</button>
@@ -1206,9 +1224,10 @@
             <div class="up-grid" id="up-grid"></div>
           </div>
           <div id="pane-own" style="display:none">
-            <div class="own-hint">Paste image links — one per line. Public <b>Dropbox</b> &amp; <b>Google Drive</b> share links and direct image URLs are supported.</div>
+            <div class="own-hint">Paste image links — one per line. Public <b>Dropbox</b> &amp; <b>Google Drive</b> <b>file</b> links (Share → Copy link) and direct image URLs work. Whole-folder links can’t be opened — link each image.</div>
             <textarea id="own-input" placeholder="https://www.dropbox.com/s/…/photo.jpg?dl=0&#10;https://drive.google.com/file/d/FILE_ID/view&#10;https://example.com/image.jpg"></textarea>
             <button id="own-load">Load these images</button>
+            <div id="own-error" class="own-error" style="display:none"></div>
           </div>
         </div>
         <div class="ic-foot">
@@ -2761,26 +2780,49 @@
 
     // "Own Links" — paste image URLs / public Dropbox / Google Drive share links.
     function parseOwnLinks(text) {
-      return text.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean).map((raw, i) => {
+      const tokens = text.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
+      const items = [], folderLinks = [];
+      tokens.forEach((raw, i) => {
+        // A Drive *folder* link can't be expanded to image URLs from the browser —
+        // Drive renders its file list with JS behind an auth'd API and CORS-blocks
+        // the page itself. Flag these so we can tell the user instead of silently failing.
+        if (/drive\.google\.com\/drive\/(u\/\d+\/)?folders\//.test(raw)) { folderLinks.push(raw); return; }
         let url = raw;
         if (/dropbox\.com/.test(url)) {
           url = url.replace('www.dropbox.com', 'dl.dropboxusercontent.com').replace(/[?&]dl=\d/, '').replace(/[?&]raw=\d/, '');
         }
         const gd = url.match(/drive\.google\.com\/file\/d\/([^/]+)/) || url.match(/[?&]id=([\w-]+)/);
-        if (gd) url = `https://drive.google.com/uc?export=view&id=${gd[1]}`;
+        // thumbnail?id=…&sz= is the reliable hotlink endpoint today; uc?export=view is
+        // increasingly locked down (interstitials / no CORS on large originals).
+        if (gd) url = `https://drive.google.com/thumbnail?id=${gd[1]}&sz=w2000`;
         const name = (raw.split('/').pop() || 'image').split('?')[0] || 'Image';
-        return { id: 'own_' + hashString(url) + '_' + i, title: decodeURIComponent(name), thumb: url, image: url,
-                 source: 'own', metadata: { collection: 'Own Links' } };
+        items.push({ id: 'own_' + hashString(url) + '_' + i, title: decodeURIComponent(name), thumb: url, image: url,
+                     source: 'own', metadata: { collection: 'Own Links' } });
       });
+      return { items, folderLinks };
     }
     function loadOwnLinks() {
-      const text = document.getElementById('own-input').value;
-      const list = parseOwnLinks(text);
-      if (!list.length) return;
-      loadSourceOntoCanvas(list, 'own');
+      const err = document.getElementById('own-error');
+      const { items, folderLinks } = parseOwnLinks(document.getElementById('own-input').value);
+      if (folderLinks.length && !items.length) {
+        if (err) {
+          err.style.display = '';
+          err.innerHTML = 'That’s a Google Drive <b>folder</b> link — Drive doesn’t let other sites read a folder’s contents, '
+            + 'so it can’t be opened here. Open the folder, then for each image use <b>Share → Copy link</b> '
+            + '(or right-click → Get link) and paste those links, one per line.';
+        }
+        return;
+      }
+      if (err) err.style.display = 'none';
+      if (!items.length) return;
+      showCanvasLoading('Loading your images…');
+      loadSourceOntoCanvas(items, 'own');
       addBookmarkNodes('own');
-      setBreadcrumb('own', `${list.length} links`);
+      setBreadcrumb('own', `${items.length} link${items.length > 1 ? 's' : ''}`);
       closeImport();
+      // Textures stream in asynchronously like any remote source; give brief visible
+      // feedback, then reveal the (progressively filling) canvas.
+      setTimeout(hideCanvasLoading, 700);
     }
 
     /* ── Bookmarks — local-first, IndexedDB (handles thousands of items) ── */
@@ -3555,28 +3597,69 @@
       } else stageFiles(dt.files);
     }
 
-    function stageFiles(files) {
-      [...files].forEach((file) => {
-        if (!file.type.startsWith('image/')) return;
+    // Soft cap so a stray multi-thousand-file folder can't exhaust memory/IndexedDB.
+    const MAX_UPLOAD = 400;
+    function showUploadProgress(label, frac) {
+      const wrap = document.getElementById('up-progress');
+      const fill = document.getElementById('up-progress-fill');
+      const lbl  = document.getElementById('up-progress-label');
+      if (!wrap) return;
+      wrap.style.display = '';
+      if (fill) fill.style.width = Math.round((frac || 0) * 100) + '%';
+      if (lbl)  lbl.textContent = label || 'Processing…';
+    }
+    function hideUploadProgress() {
+      const wrap = document.getElementById('up-progress');
+      if (wrap) wrap.style.display = 'none';
+    }
+    // Ingest dropped/chosen files. CRITICAL: decode with BOUNDED concurrency — a folder
+    // of hundreds of high-res originals must never hold more than POOL full-size bitmaps
+    // in memory at once, or the tab dies. Each file is downscaled to a 480px JPEG dataURL
+    // (survives reload, tiny in IndexedDB) and the full bitmap is released immediately.
+    async function stageFiles(fileList) {
+      let images = [...fileList].filter((f) => f.type && f.type.startsWith('image/'));
+      if (!images.length) return;
+      let note = '';
+      if (images.length > MAX_UPLOAD) { note = ` (first ${MAX_UPLOAD} of ${images.length})`; images = images.slice(0, MAX_UPLOAD); }
+      const total = images.length;
+      let done = 0;
+      showUploadProgress(`Processing 0 / ${total}${note}…`, 0);
+
+      const processOne = (file) => new Promise((resolve) => {
         const url = URL.createObjectURL(file);
         const img = new Image();
+        const tick = () => {
+          done++;
+          showUploadProgress(`Processing ${done} / ${total}${note}…`, done / total);
+          resolve();
+        };
         img.onload = () => {
           const aspect = img.naturalWidth / img.naturalHeight || 1;
           const color  = sampleColor(img);
-          let thumb = url;
+          let thumb = url, baked = false;
           try {   // bake a dataURL so the upload survives a reload
             const w = 480, c = document.createElement('canvas');
             c.width = w; c.height = Math.round(w / aspect);
             c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-            thumb = c.toDataURL('image/jpeg', 0.85);
+            thumb = c.toDataURL('image/jpeg', 0.85); baked = true;
           } catch {}
-          const item = { id: 'up_' + (assetSeq++), name: file.name.replace(/\.[^.]+$/, ''), thumb, aspect, color, checked: true };
+          if (baked) URL.revokeObjectURL(url);   // only safe once thumb no longer points at the blob
+          // Collision-safe id: assetSeq alone resets to 0 on reload and would clash with stored items.
+          const item = { id: 'up_' + Date.now().toString(36) + '_' + (assetSeq++), name: file.name.replace(/\.[^.]+$/, ''), thumb, aspect, color, checked: true };
           uploads.push(item); idbPut(UP_STORE, item);
           renderUploadGrid();
-          URL.revokeObjectURL(url);
+          tick();
         };
+        img.onerror = () => { URL.revokeObjectURL(url); tick(); };   // skip unreadable file, keep the batch moving
         img.src = url;
       });
+
+      const POOL = 4;
+      const queue = images.slice();
+      await Promise.all(Array.from({ length: Math.min(POOL, queue.length) }, async () => {
+        while (queue.length) await processOne(queue.shift());
+      }));
+      hideUploadProgress();
     }
     function addUploadMesh(item) {
       return addImportedMesh({
@@ -3593,8 +3676,15 @@
       chosen.forEach(addUploadMesh);
       placeConstellation();
       nodeBudget = personalMeshes.length;
+      clearFilters();                        // never carry a previous collection's filters over
       rebuildFacets(); applyFilters();
       centerOnCollection();
+      // Keep the infinite chunk field running, themed with the uploaded images, so even
+      // a handful of uploads fills space in every direction (tiles repeat) instead of being
+      // a finite cluster you can fly out of — same treatment every live source gets.
+      buildAmbientPool();
+      ambientActive = true;
+      ctrl.cx = ctrl.cy = ctrl.cz = null; ctrl.pendingChunk = null;   // force a rebuild around the camera
       setBreadcrumb('uploads', `${chosen.length} selected`);
       closeImport();
     }
