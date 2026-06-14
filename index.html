@@ -940,8 +940,13 @@
       .info-row-meta { flex-wrap: wrap; }
       .gt-card, .dc-card { padding: 20px; }
 
-      /* Comfier touch targets for filter chips */
-      .chip, .coll-chip { padding: 7px 12px; }
+      /* Comfier touch targets for filter chips. Also let long keywords (e.g.
+         "Saint-Rémy-de-Provence", "Chicago World's Fairs") wrap instead of
+         overflowing — a chip must never be wider than the screen. */
+      .chip, .coll-chip {
+        padding: 7px 12px; max-width: 100%;
+        white-space: normal; overflow-wrap: anywhere;
+      }
 
       /* Source abbreviations replace full names on mobile chips */
       .src-abbr { display: inline; font-size: 13px; color: var(--text); letter-spacing: 0.01em; }
@@ -2806,10 +2811,18 @@
     }
     function updateBookmarkCount() {
       const el = document.getElementById('dock-bm-count');
-      const btn = document.getElementById('dock-bookmarks');
       const n = bookmarkIds.size;
       if (el) el.textContent = String(n);
-      if (btn) btn.classList.toggle('on-badge', n > 0);
+      // NB: the green dot is NOT a "has bookmarks" indicator — it only flashes briefly
+      // when a NEW bookmark is added (see flashBookmarkDot), so it reads as a confirmation.
+    }
+    // Briefly light the bookmark dock dot to confirm a just-added bookmark.
+    function flashBookmarkDot() {
+      const btn = document.getElementById('dock-bookmarks');
+      if (!btn) return;
+      btn.classList.add('on-badge');
+      clearTimeout(btn._dotTimer);
+      btn._dotTimer = setTimeout(() => btn.classList.remove('on-badge'), 2000);
     }
 
     // An asset's id within its collection, and the composite (per-collection) key.
@@ -2882,6 +2895,7 @@
         const asset = await withPersistentThumb(meshToAsset(m));
         await bmPut({ id: key, collectionId, assetId, nodeId: m.userData.nodeId, asset, title: asset.title, thumb: asset.thumb, timestamp: Date.now() });
         if (star) { star.classList.add('pop'); setTimeout(() => star.classList.remove('pop'), 220); }
+        flashBookmarkDot();
       }
       updateStar(); updateBookmarkCount();
       if (document.getElementById('bookmarks').classList.contains('open')) renderBookmarksPanel();
